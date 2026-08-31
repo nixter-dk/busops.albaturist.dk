@@ -102,6 +102,18 @@ class BusOpsTest extends TestCase {
         $this->deleteJson("/api/employees/{$employee->id}")->assertNoContent();
         $this->assertDatabaseMissing('users',['id'=>$employee->id]);
     }
+    public function test_admin_can_reset_customer_password():void {
+        $admin=User::factory()->create(['role'=>'admin']);
+        $customerUser=User::factory()->create(['role'=>'customer','email'=>'kunde@bus4you.dk','password'=>'gammel-kode']);
+        $customer=Customer::create(['name'=>'Bus4You','email'=>'kunde@bus4you.dk']);
+        $this->actingAs($admin)->patchJson("/api/customers/{$customer->id}/password",['password'=>'NySikkerKode123!','password_confirmation'=>'NySikkerKode123!'])->assertNoContent();
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('NySikkerKode123!',$customerUser->fresh()->password));
+    }
+    public function test_customer_cannot_reset_customer_password():void {
+        $customerUser=User::factory()->create(['role'=>'customer','email'=>'kunde@bus4you.dk']);
+        $customer=Customer::create(['name'=>'Bus4You','email'=>'kunde@bus4you.dk']);
+        $this->actingAs($customerUser)->patchJson("/api/customers/{$customer->id}/password",['password'=>'NySikkerKode123!','password_confirmation'=>'NySikkerKode123!'])->assertForbidden();
+    }
     public function test_admin_can_change_employee_on_assigned_task():void {
         $admin=User::factory()->create(['role'=>'admin']); $first=User::factory()->create(['role'=>'employee']); $second=User::factory()->create(['role'=>'employee']); $company=Customer::create(['name'=>'Bus4You']);
         $task=BusTask::create(['customer_id'=>$company->id,'created_by'=>$admin->id,'employee_id'=>$first->id,'bus_number'=>'SKIFT','pickup_location'=>'Busterminal','dropoff_location'=>'Københavns Busterminal','scheduled_at'=>now()->addHour(),'status'=>'assigned']);

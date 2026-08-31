@@ -104,6 +104,16 @@ class BusOpsController extends Controller {
     }
     public function deviation(Request $r,BusTask $task) { abort_unless($r->user()->role==='admin'||$task->employee_id===$r->user()->id,403); $d=$r->validate(['category'=>'required|string','description'=>'required|string']); $item=Deviation::create($d+['bus_task_id'=>$task->id,'reported_by'=>$r->user()->id]); $this->log($r,'Afvigelse registreret',$task,$d); return response()->json($item,201); }
     public function customer(Request $r) { $this->admin($r); return Customer::create($r->validate(['name'=>'required','contact_name'=>'nullable','email'=>'nullable|email','phone'=>'nullable'])); }
+    public function resetCustomerPassword(Request $r,Customer $customer) {
+        $this->admin($r);
+        $d=$r->validate(['password'=>'required|string|min:8|confirmed']);
+        abort_if(blank($customer->email),422,'Kunden har ingen e-mailadresse.');
+        $user=User::where('role','customer')->where('email',$customer->email)->first();
+        abort_unless($user,422,'Der findes ingen kundelogin med denne e-mailadresse.');
+        $user->update(['password'=>$d['password']]);
+        $this->log($r,'Kundens adgangskode nulstillet',null,['customer_id'=>$customer->id]);
+        return response()->noContent();
+    }
     public function employee(Request $r) { $this->admin($r); $d=$r->validate(['name'=>'required','email'=>'required|email|unique:users','password'=>'required|min:8','phone'=>'nullable']); return User::create($d+['role'=>'employee','has_driving_license'=>true]); }
     public function updateEmployee(Request $r,User $employee) { $this->admin($r); abort_unless($employee->role==='employee',404); $d=$r->validate(['name'=>'required|string|max:255','email'=>['required','email',Rule::unique('users')->ignore($employee->id)],'phone'=>'nullable|string|max:50','password'=>'nullable|string|min:8']); if(empty($d['password']))unset($d['password']); $d['has_driving_license']=true; $employee->update($d); return $employee->fresh(); }
     public function destroyEmployee(Request $r,User $employee) { $this->admin($r); abort_unless($employee->role==='employee',404); BusTask::where('employee_id',$employee->id)->where('status','assigned')->update(['employee_id'=>null,'status'=>'unassigned']); $employee->delete(); return response()->noContent(); }

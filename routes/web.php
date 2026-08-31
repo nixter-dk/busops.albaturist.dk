@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function(){
     Route::post('/api/tasks/{task}/cancel',[BusOpsController::class,'cancel']);
     Route::post('/api/tasks/{task}/deviations',[BusOpsController::class,'deviation']);
     Route::post('/api/customers',[BusOpsController::class,'customer']);
+    Route::patch('/api/customers/{customer}/password',[BusOpsController::class,'resetCustomerPassword']);
     Route::post('/api/employees',[BusOpsController::class,'employee']);
     Route::patch('/api/employees/{employee}',[BusOpsController::class,'updateEmployee']);
     Route::delete('/api/employees/{employee}',[BusOpsController::class,'destroyEmployee']);
