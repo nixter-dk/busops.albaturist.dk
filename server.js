@@ -782,6 +782,8 @@ function createAutomaticZeroSettlements(trip,closedBy,closedAt) {
   return created;
 }
 function reopenPassengerListForChange(trip,user,reason) {
+  // Retrospective sales do not reopen the driver's signed-off operations.
+  if(trip.status==='completed')return;
   if(!trip.passengerListClosedAt)return;
   const previous={closedAt:trip.passengerListClosedAt,closedBy:trip.passengerListClosedBy};
   trip.passengerListClosedAt=null;trip.passengerListClosedBy=null;trip.passengerListCloseNote='';
@@ -1426,7 +1428,8 @@ async function api(req, res, pathname) {
     if(data.status!=='archived')return fail(res,400,'Beskedkladden kan kun arkiveres, indtil en beskedtjeneste er tilkoblet');
     draft.status='archived';draft.archivedAt=new Date().toISOString();draft.archivedBy=user.id;audit(user,'notification.draft_archived','notification',draft.id,trip.id,{type:draft.type});await saveDb();return json(res,200,{...draft,createdByName:userName(draft.createdBy),archivedByName:userName(draft.archivedBy)});
   }
-  if (trip.status === 'completed' && req.method !== 'GET' && !['settlements','transfers'].includes(part)) return fail(res,409,'Turen er driftsmæssigt afsluttet og låst. Pengeoverførsel og kontantafregning kan stadig behandles');
+  const retrospectiveSale = user.role === 'sales_manager' && req.method === 'POST' && ['passengers','group-bookings','baggage'].includes(part);
+  if (trip.status === 'completed' && req.method !== 'GET' && !['settlements','transfers'].includes(part) && !retrospectiveSale) return fail(res,409,'Turen er driftsmæssigt afsluttet og låst. Salgschefer kan efterregistrere passagerer og bagage. Pengeoverførsel og kontantafregning kan stadig behandles');
   if (part === 'seats' && req.method === 'GET') return json(res, 200, seatMap(trip.id));
   if (trip.status === 'cancelled' && ['passengers','group-bookings','baggage','ticket-scan'].includes(part)) return fail(res,409,'Turen er annulleret og kan ikke længere bruges til salg eller check-in');
   if (part === 'ticket-scan' && req.method === 'POST') {

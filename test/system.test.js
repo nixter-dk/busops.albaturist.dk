@@ -692,6 +692,24 @@ test('complete booking, check-in, baggage, expense and cash workflow', async () 
     assert.ok(driverCashboxAfterClosure.transferable.some(item=>item.reference===`passenger:${globalCashPassenger.id}`));
     const driverToSales=(await expectStatus(baseUrl,201,'/api/cash-transfers',{method:'POST',cookie:driver,body:{toUserId:isolatedOtherCashbox.holder.id,paymentRefs:[`passenger:${globalCashPassenger.id}`],note:'Billetpenge afleveres til salgschef'}})).value;
     assert.equal(driverToSales.transferType,'sales_handover');
+    // Sales managers may add missing sales without reopening completed operations.
+    const latePath=`/api/trips/${closureTrip.id}`;
+    const beforeLate=(await expectStatus(baseUrl,200,latePath,{cookie:sales})).value.trip;
+    const lateBody={name:'Efterregistreret gæst',phone:'45454545',pickupStopId:origin.id,destinationStopId:destination.id,paymentStatus:'cash',cashAmount:100,paymentCurrency:'DKK',seatNumber:20};
+    await expectStatus(baseUrl,409,`${latePath}/passengers`,{method:'POST',cookie:driver,body:lateBody});
+    const latePassenger=(await expectStatus(baseUrl,201,`${latePath}/passengers`,{method:'POST',cookie:otherSales,body:lateBody})).value;
+    assert.equal(latePassenger.cashHolderUserId,isolatedOtherCashbox.holder.id);
+    await expectStatus(baseUrl,409,`${latePath}/passengers`,{method:'POST',cookie:sales,body:{...lateBody,name:'Optaget sæde',phone:'46464646'}});
+    await expectStatus(baseUrl,409,`${latePath}/passengers`,{method:'PATCH',cookie:sales,body:{id:latePassenger.id,checkedIn:true}});
+    await expectStatus(baseUrl,409,`${latePath}/passengers`,{method:'DELETE',cookie:sales,body:{id:latePassenger.id,reason:'Må ikke slette'}});
+    await expectStatus(baseUrl,201,`${latePath}/group-bookings`,{method:'POST',cookie:sales,body:{phone:'47474747',pickupStopId:origin.id,destinationStopId:destination.id,paymentStatus:'unpaid',passengers:[{name:'Sen gruppe A',seatNumber:21},{name:'Sen gruppe B',seatNumber:22}]}});
+    const lateBag={senderName:'Sen bagage',recipientName:'Modtager',phone:'48484848',pickupStopId:origin.id,destinationStopId:destination.id,pieces:1,paymentStatus:'unpaid',photoName:'sen.png',photoType:'image/png',photoData:baggagePhotoData};
+    await expectStatus(baseUrl,409,`${latePath}/baggage`,{method:'POST',cookie:driver,body:lateBag});
+    await expectStatus(baseUrl,201,`${latePath}/baggage`,{method:'POST',cookie:sales,body:lateBag});
+    const afterLate=(await expectStatus(baseUrl,200,latePath,{cookie:sales})).value.trip;
+    assert.equal(afterLate.status,'completed');
+    assert.equal(afterLate.closedAt,beforeLate.closedAt);
+    assert.equal(afterLate.passengerListClosedAt,beforeLate.passengerListClosedAt);
     await expectStatus(baseUrl,403,'/api/cash-transfers',{method:'PATCH',cookie:driver,body:{id:driverToSales.id,status:'accepted'}});
     await expectStatus(baseUrl,200,'/api/cash-transfers',{method:'PATCH',cookie:otherSales,body:{id:driverToSales.id,status:'accepted'}});
     const outsideTripBudget=(await expectStatus(baseUrl,201,'/api/cash-transfers',{method:'POST',cookie:otherSales,body:{toUserId:outsideDriver.id,tripId:null,amountDKK:80,amountEUR:0,note:'Budget uden bestemt tur'}})).value;
